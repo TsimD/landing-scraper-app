@@ -5,15 +5,27 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase'; // ПРОВЕРЬТЕ ПУТЬ
 
-// --- ИСПРАВЛЕНИЕ ОШИБКИ TYPESCRIPT ---
-// Явно объявляем тип для опций форматирования даты, чтобы TypeScript знал, что это такое.
-type DateTimeFormatOptions = Intl.DateTimeFormatOptions; 
-// ------------------------------------
+// --- ИНТЕРФЕЙСЫ И ТИПЫ ДЛЯ TYPESCRIPT ---
 
-// Вспомогательная функция для форматирования даты
+// 1. Интерфейс для объекта задачи, соответствующий вашей таблице Supabase 'tasks'
+interface Task {
+  id: string;
+  url: string;
+  status: string;
+  created_at: string;
+  // Поля, которые приходят из БД, но не используются в этом компоненте, можно опустить,
+  // или добавить как необязательные (например, assets_count?: number;).
+}
+
+// 2. Явно объявляем тип для опций форматирования даты (для устранения ошибки сборки)
+type DateTimeFormatOptions = Intl.DateTimeFormatOptions; 
+
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
+// Функция для форматирования даты (dateString теперь явно string)
 const formatTaskDate = (dateString: string) => {
   try {
-    // Явно указываем тип объекта опций для Intl.DateTimeFormatOptions
+    // options теперь явно типизирован как DateTimeFormatOptions
     const options: DateTimeFormatOptions = { 
       year: 'numeric', 
       month: 'short', 
@@ -22,21 +34,24 @@ const formatTaskDate = (dateString: string) => {
       minute: '2-digit' 
     };
     
-    // Используем toLocaleTimeString
     return new Date(dateString).toLocaleTimeString('ru-RU', options);
   } catch {
     return dateString;
   }
 };
 
+// --- ГЛАВНЫЙ КОМПОНЕНТ ---
 const HomePage = () => {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [tasks, setTasks] = useState([]); 
+  
+  // Явная типизация useState: Теперь TypeScript знает, что это массив объектов Task
+  const [tasks, setTasks] = useState<Task[]>([]); 
 
   // --- ФУНКЦИЯ ЗАГРУЗКИ ИСТОРИИ ИЗ SUPABASE ---
   const fetchTasks = async () => {
+    // TypeScript теперь понимает, что data будет массивом Task[]
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
@@ -45,7 +60,8 @@ const HomePage = () => {
     if (error) {
       console.error('Error fetching tasks:', error.message);
     } else {
-      setTasks(data || []);
+      // data || [] теперь корректно назначается массиву Task[]
+      setTasks(data as Task[] || []); 
     }
   };
 
