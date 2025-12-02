@@ -52,7 +52,7 @@ async function scrapeUrl(url: string): Promise<ScrapingResult> {
     // Настройка Puppeteer для Vercel
     browser = await puppeteer.launch({
       args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
-      defaultViewport: chromium.defaultViewport as { width: number, height: number } | null,
+    //   defaultViewport: chromium.defaultViewport as { width: number, height: number } | null,
       executablePath: await chromium.executablePath(), 
       headless: chromium.headless as boolean | 'new', // Типы headless
       ignoreHTTPSErrors: true,
