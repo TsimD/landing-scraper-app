@@ -54,7 +54,7 @@ async function scrapeUrl(url: string): Promise<ScrapingResult> {
       args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
     //   defaultViewport: chromium.defaultViewport as { width: number, height: number } | null,
       executablePath: await chromium.executablePath(), 
-      headless: 'new',
+      headless: 'new' as any,
       ignoreHTTPSErrors: true,
     });
 
