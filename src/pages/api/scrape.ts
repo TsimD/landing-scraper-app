@@ -114,7 +114,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ message: 'Scraping failed by Puppeteer.', details: result.error });
     }
 
-    const htmlContent: string = result.html;
+    const htmlContent: string = result.html!;
     const baseUrl: string = new URL(url).origin;
     // Типизация Cheerio
     const $: cheerio.CheerioAPI = cheerio.load(htmlContent);
