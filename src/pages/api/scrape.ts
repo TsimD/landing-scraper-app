@@ -1,7 +1,7 @@
 // pages/api/scrape.ts
 
 import * as cheerio from 'cheerio';
-import type { Element } from 'cheerio';
+
 // Next.js API типы
 import { NextApiRequest, NextApiResponse } from 'next'; 
 import { downloadFile } from '../../utils/download'; 
@@ -38,7 +38,7 @@ interface ResourceItem {
 interface DownloadableResource {
     type: string;
     url: string;
-    element: Element;
+    element: any;
     attrName: string;
 }
 
@@ -133,7 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ];
 
     resourceElements.forEach((item: ResourceItem) => {
-        $(item.selector).each((i: number, el: Element) => {
+        $(item.selector).each((i: number, el: any) => {
             const path: string | undefined | null = $(el).attr(item.attr);
             if (path && !path.startsWith('data:')) {
                 const absoluteUrl: string = new URL(path, baseUrl).href;
