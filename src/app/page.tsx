@@ -180,7 +180,7 @@ const HomePage = () => {
           ))}
           {tasks.length === 0 && (
             <tr>
-              <td colSpan="3" style={{ textAlign: 'center', padding: '15px', color: '#666' }}>
+              <td colSpan={3} style={{ textAlign: 'center', padding: '15px', color: '#666' }}>
                 История пока пуста. Запустите первый парсинг!
               </td>
             </tr>
