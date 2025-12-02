@@ -55,7 +55,7 @@ async function scrapeUrl(url: string): Promise<ScrapingResult> {
     //   defaultViewport: chromium.defaultViewport as { width: number, height: number } | null,
       executablePath: await chromium.executablePath(), 
       headless: 'new' as any,
-      ignoreHTTPSErrors: true,
+    //   ignoreHTTPSErrors: true,
     });
 
     // Явно указываем тип Page
