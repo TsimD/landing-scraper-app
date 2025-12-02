@@ -3,32 +3,33 @@
 import { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // ЭТА НАСТРОЙКА КРИТИЧЕСКИ ВАЖНА для @sparticuz/chromium!
   transpilePackages: ['@sparticuz/chromium'],
+
+  // ИСПРАВЛЕНИЕ: Добавляем пустой объект turbopack, чтобы подавить ошибку конфликта
+  // с кастомным webpack (Turbopack, TIP: ... simply setting an empty turbopack config...).
+  turbopack: {}, 
   
-  // ДОБАВЛЯЕМ ЭТОТ БЛОК!
+  // БЛОК WEBPACK ДОЛЖЕН БЫТЬ ОСТАВЛЕН, чтобы обработать externals для Puppeteer
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // Игнорируем модули, которые Puppeteer пытается загрузить,
-      // но которые Vercel не может найти в бандле.
-      config.externals.push({
-        'perf_hooks': 'perf_hooks',
-        'child_process': 'child_process',
-        'fs': 'fs',
-        'path': 'path',
-        'os': 'os',
-        'url': 'url',
-        'readline': 'readline',
-        'http': 'http',
-        'https': 'https',
-        'stream': 'stream',
-        'process': 'process',
-      });
+      // Игнорируем модули, которые Puppeteer пытается загрузить, но которые Vercel не может найти
+      config.externals.push(
+        'perf_hooks',
+        'child_process',
+        'fs',
+        'path',
+        'os',
+        'url',
+        'readline',
+        'http',
+        'https',
+        'stream',
+        'process',
+      );
     }
     return config;
   },
-  
-  // Мы снова добавляем webpack, но Turbopack будет ругаться предупреждением, 
-  // но пропустит сборку, потому что это критически важно.
 };
 
 export default nextConfig;
