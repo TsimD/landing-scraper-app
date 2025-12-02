@@ -1,39 +1,71 @@
-// pages/api/scrape.js
+// pages/api/scrape.ts
 
 import * as cheerio from 'cheerio';
+// Next.js API типы
+import { NextApiRequest, NextApiResponse } from 'next'; 
 import { downloadFile } from '../../utils/download'; 
 import { join } from 'path';
 import { promises as fs } from 'fs';
-import archiver from 'archiver';
+import archiver, { Archiver } from 'archiver'; // Типизация Archiver
 import { supabase } from '../../utils/supabase';
+import { Writable } from 'stream'; // Для pipe(res)
 
 // --- PUPPETEER ИМПОРТЫ ДЛЯ VERCEL ---
 import chromium from '@sparticuz/chromium';
-import puppeteer from 'puppeteer-core';
+// Используем конкретные типы из puppeteer-core
+import puppeteer, { Browser, Page } from 'puppeteer-core'; 
 // ------------------------------------
 
+// --- ИНТЕРФЕЙСЫ ---
+
+// Интерфейс для возвращаемого значения из scrapeUrl
+interface ScrapingResult {
+    html: string;
+    success: boolean;
+    error?: string;
+}
+
+// Интерфейс для элемента ресурса (для массива resources)
+interface ResourceItem {
+    selector: string;
+    attr: string;
+    type: string;
+    attrName: string;
+}
+
+// Интерфейс для скачиваемого ресурса
+interface DownloadableResource {
+    type: string;
+    url: string;
+    element: cheerio.Element;
+    attrName: string;
+}
+
 // ФУНКЦИЯ ПАРСИНГА С ИСПОЛЬЗОВАНИЕМ PUPPETEER
-async function scrapeUrl(url) {
-  let browser = null;
+// ИСПРАВЛЕНО: Явно указываем тип параметра url
+async function scrapeUrl(url: string): Promise<ScrapingResult> {
+  // Явно указываем тип Browser
+  let browser: Browser | null = null;
 
   try {
     // Настройка Puppeteer для Vercel
     browser = await puppeteer.launch({
       args: [...chromium.args, '--hide-scrollbars', '--disable-web-security'],
-      defaultViewport: chromium.defaultViewport,
+      defaultViewport: chromium.defaultViewport as { width: number, height: number } | null,
       executablePath: await chromium.executablePath(), 
-      headless: chromium.headless,
+      headless: chromium.headless as boolean | 'new', // Типы headless
       ignoreHTTPSErrors: true,
     });
 
-    const page = await browser.newPage();
+    // Явно указываем тип Page
+    const page: Page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
 
-    const htmlContent = await page.content();
+    const htmlContent: string = await page.content();
     return { html: htmlContent, success: true };
 
-  } catch (error) {
+  } catch (error: any) { // Явно типизируем error
     console.error('Scraping Error:', error);
     return { success: false, error: error.message };
   } finally {
@@ -44,16 +76,20 @@ async function scrapeUrl(url) {
 }
 
 // ГЛАВНЫЙ ОБРАБОТЧИК
-export default async function handler(req, res) {
+// ИСПРАВЛЕНО: Явно типизируем req и res
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
-    const { url } = req.body;
+    
+    // Деструктуризация с проверкой типа
+    const { url } = req.body as { url: string }; 
     if (!url) {
         return res.status(400).json({ message: 'URL is required' });
     }
     
     // 1. ЗАПИСЬ ЗАДАЧИ В SUPABASE (Статус: SCRAPING_STARTED)
+    // Явно указываем тип для task
     const { data: task, error: dbError } = await supabase
         .from('tasks')
         // user_id: null, т.к. RLS отключен, и мы не настроили аутентификацию
@@ -66,10 +102,10 @@ export default async function handler(req, res) {
         return res.status(500).json({ message: 'Failed to record task in DB.' });
     }
 
-    const taskId = task.id;
-
+    const taskId: string = (task as { id: string }).id; // Приведение типа
+    
     // 2. ВЫЗОВ РЕАЛЬНОГО ПАРСЕРА
-    const result = await scrapeUrl(url);
+    const result: ScrapingResult = await scrapeUrl(url);
 
     if (!result.success) {
         // Обновление статуса в случае ошибки
@@ -77,27 +113,29 @@ export default async function handler(req, res) {
         return res.status(500).json({ message: 'Scraping failed by Puppeteer.', details: result.error });
     }
 
-    const htmlContent = result.html;
-    const baseUrl = new URL(url).origin;
-    const $ = cheerio.load(htmlContent);
-    const tempDir = join(process.cwd(), 'temp', Date.now().toString());
+    const htmlContent: string = result.html;
+    const baseUrl: string = new URL(url).origin;
+    // Типизация Cheerio
+    const $: cheerio.CheerioAPI = cheerio.load(htmlContent);
+    const tempDir: string = join(process.cwd(), 'temp', Date.now().toString());
     await fs.mkdir(tempDir, { recursive: true });
     
     // --- 3. Сбор ссылок ---
-    const resources = [];
-    let assetCount = 0;
-    const resourceElements = [
+    const resources: DownloadableResource[] = [];
+    let assetCount: number = 0;
+    // Явно типизируем массив элементов
+    const resourceElements: ResourceItem[] = [
         { selector: 'link[rel="stylesheet"]', attr: 'href', type: 'css', attrName: 'href' },
         { selector: 'script[src]', attr: 'src', type: 'js', attrName: 'src' },
         { selector: 'img[src]', attr: 'src', type: 'img', attrName: 'src' },
         { selector: 'link[rel="icon"]', attr: 'href', type: 'icon', attrName: 'href' }
     ];
 
-    resourceElements.forEach(item => {
-        $(item.selector).each((i, el) => {
-            const path = $(el).attr(item.attr);
+    resourceElements.forEach((item: ResourceItem) => {
+        $(item.selector).each((i: number, el: cheerio.Element) => {
+            const path: string | undefined | null = $(el).attr(item.attr);
             if (path && !path.startsWith('data:')) {
-                const absoluteUrl = new URL(path, baseUrl).href;
+                const absoluteUrl: string = new URL(path, baseUrl).href;
                 resources.push({ 
                     type: item.type, 
                     url: absoluteUrl, 
@@ -109,21 +147,22 @@ export default async function handler(req, res) {
     });
 
     // --- 4. Скачивание и Перезапись Путей ---
-    const downloadPromises = resources.map(async (resource, index) => {
+    // Типизация промисов
+    const downloadPromises: Promise<void>[] = resources.map(async (resource: DownloadableResource, index: number): Promise<void> => {
         try {
-            const urlPath = new URL(resource.url).pathname;
-            const extMatch = urlPath.match(/\.([0-9a-z]+)(?:[\?#]|$)/i);
-            const ext = (extMatch ? extMatch[1] : resource.type) || 'file'; 
+            const urlPath: string = new URL(resource.url).pathname;
+            const extMatch: RegExpMatchArray | null = urlPath.match(/\.([0-9a-z]+)(?:[\?#]|$)/i);
+            const ext: string = (extMatch ? extMatch[1] : resource.type) || 'file'; 
             
-            const fileName = `${resource.type}-${index}.${ext}`;
-            const localPath = join(tempDir, fileName);
+            const fileName: string = `${resource.type}-${index}.${ext}`;
+            const localPath: string = join(tempDir, fileName);
             
             await downloadFile(resource.url, localPath);
             
             $(resource.element).attr(resource.attrName, fileName);
             assetCount++;
             
-        } catch (downloadError) {
+        } catch (downloadError: any) {
             console.error(`Download failed for ${resource.url}: ${downloadError.message}`);
         }
     });
@@ -131,20 +170,23 @@ export default async function handler(req, res) {
     await Promise.all(downloadPromises);
 
     // --- 5. Сохранение нового HTML ---
-    const finalHtml = $.html();
-    const htmlPath = join(tempDir, 'index.html');
+    const finalHtml: string = $.html();
+    const htmlPath: string = join(tempDir, 'index.html');
     await fs.writeFile(htmlPath, finalHtml);
 
     // --- 6. Архивация и Отправка ZIP ---
-    const zipFileName = 'landing-page.zip';
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const zipFileName: string = 'landing-page.zip';
+    // Явно указываем тип Archiver
+    const archive: Archiver = archiver('zip', { zlib: { level: 9 } });
     
+    // Настройка заголовков ответа
     res.writeHead(200, {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="${zipFileName}"`,
     });
     
-    archive.pipe(res);
+    // pipe(res) - res является Writable stream
+    archive.pipe(res as Writable); 
     archive.directory(tempDir, false);
     
     await archive.finalize();
