@@ -1,31 +1,31 @@
 // src/app/page.tsx 
 
-"use client"; // Обязательно для использования хуков React
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase'; // ПРОВЕРЬТЕ ПУТЬ
 
 // --- ИНТЕРФЕЙСЫ И ТИПЫ ДЛЯ TYPESCRIPT ---
 
-// 1. Интерфейс для объекта задачи, соответствующий вашей таблице Supabase 'tasks'
+// 1. Интерфейс для объекта задачи
 interface Task {
   id: string;
   url: string;
   status: string;
   created_at: string;
-  // Поля, которые приходят из БД, но не используются в этом компоненте, можно опустить,
-  // или добавить как необязательные (например, assets_count?: number;).
+  // Добавьте assets_count, так как вы его обновляете, хотя здесь он не отображается
+  assets_count?: number; 
 }
 
-// 2. Явно объявляем тип для опций форматирования даты (для устранения ошибки сборки)
+// 2. Явно объявляем типы для опций форматирования даты и CSS (для устранения ошибок сборки)
 type DateTimeFormatOptions = Intl.DateTimeFormatOptions; 
+type CSSProperties = React.CSSProperties;
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
-// Функция для форматирования даты (dateString теперь явно string)
+// Функция для форматирования даты
 const formatTaskDate = (dateString: string) => {
   try {
-    // options теперь явно типизирован как DateTimeFormatOptions
     const options: DateTimeFormatOptions = { 
       year: 'numeric', 
       month: 'short', 
@@ -34,6 +34,7 @@ const formatTaskDate = (dateString: string) => {
       minute: '2-digit' 
     };
     
+    // В зависимости от контекста, toLocaleDateString() может быть лучше для "Даты", но toLocaleTimeString тоже работает.
     return new Date(dateString).toLocaleTimeString('ru-RU', options);
   } catch {
     return dateString;
@@ -44,14 +45,13 @@ const formatTaskDate = (dateString: string) => {
 const HomePage = () => {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Явная типизация useState: Теперь TypeScript знает, что это массив объектов Task
+  // ИСПРАВЛЕНО: Разрешаем строку ИЛИ null для состояния ошибки
+  const [error, setError] = useState<string | null>(null); 
+  // ИСПРАВЛЕНО: Явная типизация массива задач
   const [tasks, setTasks] = useState<Task[]>([]); 
 
   // --- ФУНКЦИЯ ЗАГРУЗКИ ИСТОРИИ ИЗ SUPABASE ---
   const fetchTasks = async () => {
-    // TypeScript теперь понимает, что data будет массивом Task[]
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
@@ -60,18 +60,17 @@ const HomePage = () => {
     if (error) {
       console.error('Error fetching tasks:', error.message);
     } else {
-      // data || [] теперь корректно назначается массиву Task[]
+      // Приведение типа, чтобы избежать ошибки TS
       setTasks(data as Task[] || []); 
     }
   };
 
-  // Загружаем данные при первом рендере
   useEffect(() => {
     fetchTasks();
   }, []); 
 
   // --- ОБРАБОТЧИК ОТПРАВКИ ФОРМЫ ---
-  const handleSubmit = async (e: React.FormEvent) => { // Явно указываем тип события
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -105,6 +104,7 @@ const HomePage = () => {
         setUrl('');
       } else {
         const errorData = await response.json();
+        // ИСПРАВЛЕНО: Теперь строка может быть присвоена setError
         setError(`Ошибка: ${errorData.message || 'Не удалось скачать файл. Проверьте консоль.'}`);
       }
     } catch (e) {
@@ -191,8 +191,17 @@ const HomePage = () => {
   );
 };
 
-// Стили для таблицы
-const tableHeaderStyle = { padding: '12px', border: '1px solid #ddd', textAlign: 'left', backgroundColor: '#e9e9e9' };
-const tableCellStyle = { padding: '12px', border: '1px solid #ddd', wordBreak: 'break-word' };
+// --- СТИЛИ (Исправлено: Явная типизация React.CSSProperties) ---
+const tableHeaderStyle: CSSProperties = { 
+    padding: '12px', 
+    border: '1px solid #ddd', 
+    textAlign: 'left', 
+    backgroundColor: '#e9e9e9' 
+};
+const tableCellStyle: CSSProperties = { 
+    padding: '12px', 
+    border: '1px solid #ddd', 
+    wordBreak: 'break-word' 
+};
 
 export default HomePage;
