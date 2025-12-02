@@ -1,65 +1,168 @@
-import Image from "next/image";
+// src/app/page.tsx 
 
-export default function Home() {
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../utils/supabase'; // ПРОВЕРЬТЕ ПУТЬ
+
+// Вспомогательная функция для форматирования даты
+const formatTaskDate = (dateString) => {
+  try {
+    const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return new Date(dateString).toLocaleTimeString('ru-RU', options);
+  } catch {
+    return dateString;
+  }
+};
+
+const HomePage = () => {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [tasks, setTasks] = useState([]); 
+
+  // --- ФУНКЦИЯ ЗАГРУЗКИ ИСТОРИИ ИЗ SUPABASE ---
+  const fetchTasks = async () => {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching tasks:', error.message);
+    } else {
+      setTasks(data || []);
+    }
+  };
+
+  // Загружаем данные при первом рендере
+  useEffect(() => {
+    fetchTasks();
+  }, []); 
+
+  // --- ОБРАБОТЧИК ОТПРАВКИ ФОРМЫ ---
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      });
+
+      if (response.ok) {
+        // Логика скачивания файла (Blob)
+        const contentDisposition = response.headers.get('Content-Disposition');
+        const fileNameMatch = contentDisposition && contentDisposition.match(/filename="(.+)"/);
+        const fileName = fileNameMatch ? fileNameMatch[1] : 'landing-page.zip';
+        
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+
+        await fetchTasks(); 
+        setUrl('');
+      } else {
+        const errorData = await response.json();
+        setError(`Ошибка: ${errorData.message || 'Не удалось скачать файл. Проверьте консоль.'}`);
+      }
+    } catch (e) {
+      setError('Ошибка сети или сервера.');
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // --- КОМПОНЕНТ РЕНДЕРА ---
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
+      <h1>Landing Page Scraper (MVP)</h1>
+      <p>Введите URL, чтобы скачать его локальную копию с очищенными путями.</p>
+
+      {/* Форма */}
+      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://mysite.com"
+          required
+          disabled={loading}
+          style={{ flexGrow: 1, padding: '10px', border: '1px solid #ccc', borderRadius: '4px' }}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <button 
+          type="submit" 
+          disabled={loading} 
+          style={{ 
+            padding: '10px 20px', 
+            cursor: loading ? 'not-allowed' : 'pointer', 
+            backgroundColor: loading ? '#aaa' : '#007bff', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '4px' 
+          }}
+        >
+          {loading ? 'Скачивание...' : 'Скачать ZIP'}
+        </button>
+      </form>
+      {error && <p style={{ color: 'red', marginTop: '10px', padding: '10px', border: '1px solid red', backgroundColor: '#fee' }}>{error}</p>}
+      
+      <hr style={{ margin: '30px 0', borderColor: '#eee' }} />
+
+      {/* Таблица истории задач */}
+      <h2>История запросов ({tasks.length})</h2>
+      
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '15px' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#f4f4f4' }}>
+            <th style={tableHeaderStyle}>URL</th>
+            <th style={tableHeaderStyle}>Статус</th>
+            <th style={tableHeaderStyle}>Дата</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => (
+            <tr key={task.id}>
+              <td style={tableCellStyle} title={task.url}>{task.url.substring(0, 50)}...</td>
+              <td style={{ 
+                ...tableCellStyle, 
+                color: task.status === 'DONE' ? 'green' : (task.status === 'ERROR' ? 'red' : 'orange'),
+                fontWeight: 'bold'
+              }}>
+                {task.status}
+              </td>
+              <td style={tableCellStyle}>
+                {formatTaskDate(task.created_at)}
+              </td>
+            </tr>
+          ))}
+          {tasks.length === 0 && (
+            <tr>
+              <td colSpan="3" style={{ textAlign: 'center', padding: '15px', color: '#666' }}>
+                История пока пуста. Запустите первый парсинг!
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
-}
+};
+
+// Стили для таблицы
+const tableHeaderStyle = { padding: '12px', border: '1px solid #ddd', textAlign: 'left', backgroundColor: '#e9e9e9' };
+const tableCellStyle = { padding: '12px', border: '1px solid #ddd', wordBreak: 'break-word' };
+
+export default HomePage;
