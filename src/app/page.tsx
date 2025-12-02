@@ -6,9 +6,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase'; // ПРОВЕРЬТЕ ПУТЬ
 
 // Вспомогательная функция для форматирования даты
-const formatTaskDate = (dateString) => {
+// Стало: Явно указываем, что dateString должен быть строкой (string)
+const formatTaskDate = (dateString: string) => {
   try {
     const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    // Ваш код использует toLocaleTimeString, который корректен.
     return new Date(dateString).toLocaleTimeString('ru-RU', options);
   } catch {
     return dateString;
