@@ -44,7 +44,7 @@ const formatTaskDate = (dateString: string) => {
 const HomePage = () => {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   
   // Явная типизация useState: Теперь TypeScript знает, что это массив объектов Task
   const [tasks, setTasks] = useState<Task[]>([]); 
