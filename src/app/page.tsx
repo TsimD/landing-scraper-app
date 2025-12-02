@@ -1,16 +1,28 @@
 // src/app/page.tsx 
 
-"use client";
+"use client"; // Обязательно для использования хуков React
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase'; // ПРОВЕРЬТЕ ПУТЬ
 
+// --- ИСПРАВЛЕНИЕ ОШИБКИ TYPESCRIPT ---
+// Явно объявляем тип для опций форматирования даты, чтобы TypeScript знал, что это такое.
+type DateTimeFormatOptions = Intl.DateTimeFormatOptions; 
+// ------------------------------------
+
 // Вспомогательная функция для форматирования даты
-// Стало: Явно указываем, что dateString должен быть строкой (string)
 const formatTaskDate = (dateString: string) => {
   try {
-    const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-    // Ваш код использует toLocaleTimeString, который корректен.
+    // Явно указываем тип объекта опций для Intl.DateTimeFormatOptions
+    const options: DateTimeFormatOptions = { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    };
+    
+    // Используем toLocaleTimeString
     return new Date(dateString).toLocaleTimeString('ru-RU', options);
   } catch {
     return dateString;
@@ -43,7 +55,7 @@ const HomePage = () => {
   }, []); 
 
   // --- ОБРАБОТЧИК ОТПРАВКИ ФОРМЫ ---
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => { // Явно указываем тип события
     e.preventDefault();
     setLoading(true);
     setError(null);
