@@ -3,43 +3,18 @@
 import { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // 1. Принудительно включаем пакет в сборку
-  transpilePackages: ['@sparticuz/chromium'],
+  // 1. Обозначаем пакеты как "внешние".
+  // Это говорит Next.js не пытаться упаковать их внутрь JS-файла, а оставить в node_modules.
+  // Это автоматически решает проблемы с 'fs', 'path' и другими Node.js модулями внутри Puppeteer.
+  serverExternalPackages: ['@sparticuz/chromium', 'puppeteer', 'archiver'],
 
-  experimental: {
-    // 2. КРИТИЧЕСКИ ВАЖНО: Явно указываем Vercel скопировать бинарные файлы Chromium
-    // в папку функции /api/scrape. Это решает ошибку "directory does not exist".
-    outputFileTracingIncludes: {
-      '/api/scrape': ['./node_modules/@sparticuz/chromium/bin/**/*'],
-    },
-    // Также помечаем как внешний пакет
-    serverComponentsExternalPackages: ['@sparticuz/chromium'],
-  } as any, // as any для обхода старых типов Next.js
-
-  // 3. Пустой объект для подавления конфликта с Turbopack
-  turbopack: {},
-
-  // 4. Конфигурация Webpack для игнорирования Node.js модулей в Puppeteer
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.externals.push({
-        'perf_hooks': 'perf_hooks',
-        'child_process': 'child_process',
-        'fs': 'fs',
-        'path': 'path',
-        'os': 'os',
-        'url': 'url',
-        'readline': 'readline',
-        'http': 'http',
-        'https': 'https',
-        'stream': 'stream',
-        'process': 'process',
-        // Добавляем puppeteer в исключения, чтобы он не бандлился Webpack-ом
-        'puppeteer': 'puppeteer', 
-      });
-    }
-    return config;
+  // 2. Принудительно копируем бинарные файлы Chromium в лямбда-функцию.
+  // Это решает ошибку "directory .../bin does not exist".
+  outputFileTracingIncludes: {
+    '/api/scrape': ['./node_modules/@sparticuz/chromium/bin/**/*'],
   },
-};
+
+  // МЫ УДАЛИЛИ transpilePackages и webpack, так как они вызывали конфликты.
+} as any; // Кастуем к any, чтобы TypeScript не блокировал сборку из-за новых ключей Next.js 16
 
 export default nextConfig;
