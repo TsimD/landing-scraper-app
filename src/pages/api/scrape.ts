@@ -1,7 +1,5 @@
 // src/pages/api/scrape.ts
-export const config = {
-  runtime: 'edge', // <--- КРИТИЧЕСКИ ВАЖНО!
-};
+
 
 // Импорт внешних библиотек
 import * as cheerio from 'cheerio';
