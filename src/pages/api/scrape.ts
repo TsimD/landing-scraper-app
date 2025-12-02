@@ -21,7 +21,7 @@ import puppeteer, { Browser, Page } from 'puppeteer-core';
 
 // Интерфейс для возвращаемого значения из scrapeUrl
 interface ScrapingResult {
-    html: string;
+    html?: string;
     success: boolean;
     error?: string;
 }
