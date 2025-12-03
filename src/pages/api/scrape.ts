@@ -4,7 +4,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import puppeteer from 'puppeteer-core'; // Используем puppeteer-core, так как Chromium предоставляется отдельно
 import chromium from '@sparticuz/chromium';
 import archiver from 'archiver';
-import { supabase } from '../../../utils/supabase';
+import { supabase } from '../../utils/supabase';
 
 // Указываем, что это Serverless Function, работающая на Node.js
 export const config = {
