@@ -1,15 +1,15 @@
 // src/pages/api/scrape.ts
 
 import { NextApiRequest, NextApiResponse } from 'next';
-import * as puppeteer from 'puppeteer-core'; // <-- ИСПРАВЛЕНИЕ: используем 'as' для типов
+// ИСПРАВЛЕНИЕ: Используем стандартный импорт, так как типы теперь встроены в puppeteer-core
+import puppeteer from 'puppeteer-core'; 
 import chromium from '@sparticuz/chromium';
 import archiver from 'archiver';
-import { supabase } from '../../utils/supabase'; // <-- ИСПРАВЛЕНИЕ: правильный относительный путь
+import { supabase } from '../../utils/supabase'; // Правильный относительный путь
 
 // Указываем, что это Serverless Function, работающая на Node.js
 export const config = {
   runtime: 'nodejs',
-  // Увеличиваем лимит размера тела запроса, хотя для GET-запроса это менее критично
   api: {
     bodyParser: {
       sizeLimit: '1mb',
@@ -32,8 +32,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
-  let browser: puppeteer.Browser | null = null;
-  let taskId: number | null = null; // Для сохранения ID задачи
+  // ТИПЫ: Используем импортированный объект puppeteer
+  let browser: puppeteer.Browser | null = null; 
+  let taskId: number | null = null; 
 
   try {
     // 1. Создаем запись о начале задачи в Supabase
@@ -45,7 +46,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (insertError) {
       console.error('Supabase Insert Error:', insertError);
-      // Не прерываем выполнение, но записываем ошибку в лог
     }
 
     if (taskData) {
@@ -54,24 +54,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 2. Настройка и запуск Chromium
     browser = await puppeteer.launch({
-      // Используем аргументы, настройки и путь, предоставленные @sparticuz/chromium
       args: [
         ...chromium.args, 
         '--no-sandbox', 
         '--disable-setuid-sandbox', 
         '--disable-dev-shm-usage'
       ],
-      // УДАЛЕНО: defaultViewport: chromium.defaultViewport, (удалили, чтобы избежать ошибки типов)
       executablePath: await chromium.executablePath(),
-      headless: 'new', // 'new' - современный, более стабильный режим (используем, чтобы не зависеть от свойства chromium.headless)
+      // 'new' теперь должен работать, так как нет конфликтующих старых типов
+      headless: 'new', 
     });
 
     const page = await browser.newPage();
 
-    // 3. Блокировка ненужных ресурсов (для повышения скорости и обхода ошибки 'path')
+    // 3. Блокировка ненужных ресурсов
     await page.setRequestInterception(true);
     page.on('request', (request) => {
-      // Блокируем стили, изображения, шрифты и медиа, чтобы избежать ошибки 'path'
       if (
         request.resourceType() === 'stylesheet' ||
         request.resourceType() === 'image' ||
@@ -88,7 +86,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await page.goto(url, { waitUntil: 'domcontentloaded' });
 
     // 5. Ожидаем появления селектора
-    // Установим более короткий таймаут, так как серверные функции имеют ограничение по времени
     await page.waitForSelector(elementSelector as string, { timeout: 5000 });
 
     // 6. Получаем целевой элемент и делаем скриншот
@@ -113,10 +110,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Добавляем HTML-код
     archive.append(htmlContent, { name: 'content.html' });
 
-    // Финализируем архив (отправляем его клиенту)
+    // Финализируем архив
     await archive.finalize();
 
-    // 8. Обновляем статус задачи в Supabase (после успешной отправки)
+    // 8. Обновляем статус задачи в Supabase
     if (taskId) {
       await supabase
         .from('tasks')
@@ -127,7 +124,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error) {
     console.error('Scraping Error:', error);
 
-    // Обновляем статус задачи как ошибочный (если ID доступен)
     if (taskId) {
       await supabase
         .from('tasks')
@@ -135,7 +131,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .eq('id', taskId);
     }
 
-    // Если ответ еще не был отправлен (например, ошибка произошла до archive.finalize)
     if (!res.headersSent) {
       return res.status(500).json({ error: 'Failed to complete scraping process.', details: String(error) });
     }

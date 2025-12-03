@@ -24,7 +24,6 @@
     "@tailwindcss/postcss": "^4",
     "@types/archiver": "^7.0.0",
     "@types/node": "^20",
-    "@types/puppeteer": "^7.0.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
