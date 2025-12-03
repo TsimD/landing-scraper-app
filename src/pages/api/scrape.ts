@@ -1,10 +1,10 @@
 // src/pages/api/scrape.ts
 
 import { NextApiRequest, NextApiResponse } from 'next';
-import * as puppeteer from 'puppeteer-core';
+import * as puppeteer from 'puppeteer-core'; // <-- ИСПРАВЛЕНИЕ: используем 'as' для типов
 import chromium from '@sparticuz/chromium';
 import archiver from 'archiver';
-import { supabase } from '../../utils/supabase';
+import { supabase } from '../../utils/supabase'; // <-- ИСПРАВЛЕНИЕ: правильный относительный путь
 
 // Указываем, что это Serverless Function, работающая на Node.js
 export const config = {
@@ -55,10 +55,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 2. Настройка и запуск Chromium
     browser = await puppeteer.launch({
       // Используем аргументы, настройки и путь, предоставленные @sparticuz/chromium
-      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-      defaultViewport: chromium.defaultViewport,
+      args: [
+        ...chromium.args, 
+        '--no-sandbox', 
+        '--disable-setuid-sandbox', 
+        '--disable-dev-shm-usage'
+      ],
+      // УДАЛЕНО: defaultViewport: chromium.defaultViewport, (удалили, чтобы избежать ошибки типов)
       executablePath: await chromium.executablePath(),
-      headless: 'new', // 'new' - современный, более стабильный режим
+      headless: 'new', // 'new' - современный, более стабильный режим (используем, чтобы не зависеть от свойства chromium.headless)
     });
 
     const page = await browser.newPage();
@@ -66,8 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 3. Блокировка ненужных ресурсов (для повышения скорости и обхода ошибки 'path')
     await page.setRequestInterception(true);
     page.on('request', (request) => {
-      // Блокируем стили, изображения, шрифты и медиа, чтобы Puppeteer не пытался 
-      // скачать их и не вызывал ошибку 'path' при сохранении.
+      // Блокируем стили, изображения, шрифты и медиа, чтобы избежать ошибки 'path'
       if (
         request.resourceType() === 'stylesheet' ||
         request.resourceType() === 'image' ||
@@ -84,7 +88,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await page.goto(url, { waitUntil: 'domcontentloaded' });
 
     // 5. Ожидаем появления селектора
-    await page.waitForSelector(elementSelector as string, { timeout: 10000 });
+    // Установим более короткий таймаут, так как серверные функции имеют ограничение по времени
+    await page.waitForSelector(elementSelector as string, { timeout: 5000 });
 
     // 6. Получаем целевой элемент и делаем скриншот
     const element = await page.$(elementSelector as string);
