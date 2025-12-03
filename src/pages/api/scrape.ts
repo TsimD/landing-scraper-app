@@ -1,191 +1,142 @@
 // src/pages/api/scrape.ts
 
-
-// Импорт внешних библиотек
-import * as cheerio from 'cheerio';
-// Next.js API типы
-import { NextApiRequest, NextApiResponse } from 'next'; 
-import { downloadFile } from '../../utils/download';
-// Puppeteer
-import puppeteer, { Browser, Page } from 'puppeteer';
-// Chromium для Vercel
+import { NextApiRequest, NextApiResponse } from 'next';
+import puppeteer from 'puppeteer-core'; // Используем puppeteer-core, так как Chromium предоставляется отдельно
 import chromium from '@sparticuz/chromium';
 import archiver from 'archiver';
+import { supabase } from '../../../utils/supabase';
 
-// --- ИНТЕРФЕЙСЫ ---
+// Указываем, что это Serverless Function, работающая на Node.js
+export const config = {
+  runtime: 'nodejs',
+  // Увеличиваем лимит размера тела запроса, хотя для GET-запроса это менее критично
+  api: {
+    bodyParser: {
+      sizeLimit: '1mb',
+    },
+  },
+};
 
-// Интерфейс для результата парсинга
-interface ScrapingResult {
-    // ИСПРАВЛЕНИЕ: html теперь опционален, так как при ошибке он отсутствует
-    html?: string; 
-    success: boolean;
-    error?: string;
-}
-
-// Интерфейс для элемента, который нужно найти
-interface ResourceItem {
-    selector: string;
-    attr: string;
-    type: string; // 'img', 'css', 'js'
-}
-
-// Интерфейс для скачиваемого ресурса
-interface DownloadableResource {
-    type: string;
-    url: string;
-    // ИСПРАВЛЕНИЕ: Тип Cheerio заменен на 'any' для обхода конфликтов типов
-    element: any; 
-    attrName: string;
-}
-
-// Список ресурсов для извлечения
-const resourceElements: ResourceItem[] = [
-    { selector: 'link[rel="stylesheet"]', attr: 'href', type: 'css' },
-    { selector: 'script[src]', attr: 'src', type: 'js' },
-    { selector: 'img[src]', attr: 'src', type: 'img' },
-];
-
-// --- ФУНКЦИЯ ПАРСИНГА С ИСПОЛЬЗОВАНИЕМ PUPPETEER ---
-// ИСПРАВЛЕНИЕ: Явно указываем типы параметров и возвращаемого значения
-async function scrapeUrl(url: string): Promise<ScrapingResult> {
-    let browser: Browser | null = null;
-
-    try {
-        // Настройка Puppeteer для Vercel (используя @sparticuz/chromium)
-        browser = await puppeteer.launch({
-            args: [
-                ...chromium.args, 
-                '--hide-scrollbars', 
-                '--disable-web-security',
-                // КРИТИЧЕСКИ ВАЖНО для Vercel/Linux
-                '--no-sandbox', 
-                '--disable-setuid-sandbox'
-            ],
-            executablePath: await chromium.executablePath(), 
-            // ИСПРАВЛЕНИЕ: Установка 'new' с приведением к 'any'
-            headless: 'new' as any, 
-            // ИСПРАВЛЕНИЕ: Удалено, т.к. не существует в типах LaunchOptions
-            // ignoreHTTPSErrors: true, 
-        });
-
-        // Явно указываем тип Page
-        const page: Page = await browser.newPage(); 
-        
-        await page.goto(url, { waitUntil: 'networkidle0' });
-        
-        const htmlContent = await page.content();
-
-        return { success: true, html: htmlContent };
-
-    } catch (error: any) { // Явно типизируем error
-        console.error('Scraping Error:', error);
-        // ИСПРАВЛЕНИЕ: html теперь опционален
-        return { success: false, error: error.message }; 
-    } finally {
-        if (browser !== null) {
-            await browser.close();
-        }
-    }
-}
-
-// --- ГЛАВНЫЙ ОБРАБОТЧИК ---
+/**
+ * Обрабатывает запрос на скрапинг и возвращает ZIP-архив.
+ */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  const { url: rawUrl, elementSelector } = req.query;
+
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid URL' });
+  }
+
+  const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+  let browser: puppeteer.Browser | null = null;
+  let taskId: number | null = null; // Для сохранения ID задачи
+
+  try {
+    // 1. Создаем запись о начале задачи в Supabase
+    const { data: taskData, error: insertError } = await supabase
+      .from('tasks')
+      .insert([{ url, status: 'SCRAPING_STARTED', created_at: new Date().toISOString() }])
+      .select('id')
+      .single();
+
+    if (insertError) {
+      console.error('Supabase Insert Error:', insertError);
+      // Не прерываем выполнение, но записываем ошибку в лог
     }
 
-    const { url } = req.body;
-
-    if (!url) {
-        return res.status(400).json({ error: 'URL is required' });
+    if (taskData) {
+      taskId = taskData.id;
     }
 
-    // 1. ПАРСИНГ СТРАНИЦЫ
-    const result: ScrapingResult = await scrapeUrl(url);
-
-    if (!result.success) {
-        // Возвращаем 500, если парсинг не удался
-        return res.status(500).json({ error: result.error || 'Scraping failed by Puppeteer.' });
-    }
-
-    // 2. ОБРАБОТКА КОНТЕНТА И СКАЧИВАНИЕ
-
-    // ИСПРАВЛЕНИЕ: Используем '!' для утверждения, что html существует после проверки success: true
-    const htmlContent: string = result.html!; 
-    const baseUrl: string = new URL(url).origin;
-    // Типизация Cheerio
-    const $: cheerio.CheerioAPI = cheerio.load(htmlContent);
-
-    const downloadableResources: DownloadableResource[] = [];
-
-    resourceElements.forEach((item: ResourceItem) => {
-        // ИСПРАВЛЕНИЕ: Тип элемента Cheerio заменен на 'any'
-        $(item.selector).each((i: number, el: any) => { 
-            const path: string | undefined | null = $(el).attr(item.attr);
-
-            if (path) {
-                const fullUrl = new URL(path, baseUrl).href;
-                
-                downloadableResources.push({
-                    type: item.type,
-                    url: fullUrl,
-                    element: el,
-                    attrName: item.attr,
-                });
-            }
-        });
+    // 2. Настройка и запуск Chromium
+    browser = await puppeteer.launch({
+      // Используем аргументы, настройки и путь, предоставленные @sparticuz/chromium
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: 'new', // 'new' - современный, более стабильный режим
     });
 
-    // 3. ЗАМЕНА ССЫЛОК И СКАЧИВАНИЕ
-    const filesToArchive: { path: string; data: Buffer }[] = [];
+    const page = await browser.newPage();
 
-    for (const resource of downloadableResources) {
-        try {
-            const data = await downloadFile(resource.url);
-            const fileName = `${resource.type}/${data.fileName}`;
-            filesToArchive.push({ path: fileName, data: data.fileBuffer });
+    // 3. Блокировка ненужных ресурсов (для повышения скорости и обхода ошибки 'path')
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      // Блокируем стили, изображения, шрифты и медиа, чтобы Puppeteer не пытался 
+      // скачать их и не вызывал ошибку 'path' при сохранении.
+      if (
+        request.resourceType() === 'stylesheet' ||
+        request.resourceType() === 'image' ||
+        request.resourceType() === 'font' ||
+        request.resourceType() === 'media'
+      ) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
 
-            // Замена исходного URL на локальный путь в HTML
-            $(resource.element).attr(resource.attrName, fileName);
+    // 4. Переходим на страницу
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
 
-        } catch (error) {
-            console.error(`Error downloading ${resource.url}:`, error);
-        }
+    // 5. Ожидаем появления селектора
+    await page.waitForSelector(elementSelector as string, { timeout: 10000 });
+
+    // 6. Получаем целевой элемент и делаем скриншот
+    const element = await page.$(elementSelector as string);
+
+    if (!element) {
+      throw new Error(`Element with selector "${elementSelector}" not found.`);
     }
 
-    // Обновленный HTML
-    const updatedHtml = $.html();
-    filesToArchive.push({ path: 'index.html', data: Buffer.from(updatedHtml, 'utf-8') });
+    const screenshotBuffer = await element.screenshot({ type: 'png' });
+    const htmlContent = await element.evaluate(el => el.outerHTML);
 
-    // 4. АРХИВАЦИЯ И ОТПРАВКА
-    try {
-     
-        const archive = archiver('zip', { zlib: { level: 9 } });
-        
-        // Буфер для сбора данных архива
-        const archiveBuffers: Buffer[] = [];
-        archive.on('data', (data: Buffer) => {
-            archiveBuffers.push(data);
-        });
-        
-        // Обработчик завершения
-        archive.on('end', () => {
-            const finalZipBuffer = Buffer.concat(archiveBuffers);
+    // 7. Создаем ZIP-архив
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="scraped_data.zip"`);
 
-            res.setHeader('Content-Type', 'application/zip');
-            res.setHeader('Content-Disposition', 'attachment; filename="scraped_landing.zip"');
-            res.status(200).send(finalZipBuffer);
-        });
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.pipe(res);
 
-        // Добавление файлов в архив
-        filesToArchive.forEach(file => {
-            archive.append(file.data, { name: file.path });
-        });
+    // Добавляем скриншот
+    archive.append(screenshotBuffer, { name: 'screenshot.png' });
+    // Добавляем HTML-код
+    archive.append(htmlContent, { name: 'content.html' });
 
-        archive.finalize();
-        
-    } catch (error) {
-        console.error('Archiving Error:', error);
-        res.status(500).json({ error: 'Failed to create archive.' });
+    // Финализируем архив (отправляем его клиенту)
+    await archive.finalize();
+
+    // 8. Обновляем статус задачи в Supabase (после успешной отправки)
+    if (taskId) {
+      await supabase
+        .from('tasks')
+        .update({ status: 'DONE' })
+        .eq('id', taskId);
     }
+
+  } catch (error) {
+    console.error('Scraping Error:', error);
+
+    // Обновляем статус задачи как ошибочный (если ID доступен)
+    if (taskId) {
+      await supabase
+        .from('tasks')
+        .update({ status: 'FAILED', error_message: String(error) })
+        .eq('id', taskId);
+    }
+
+    // Если ответ еще не был отправлен (например, ошибка произошла до archive.finalize)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Failed to complete scraping process.', details: String(error) });
+    }
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
 }
