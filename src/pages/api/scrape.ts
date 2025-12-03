@@ -1,7 +1,7 @@
 // src/pages/api/scrape.ts
 
 import { NextApiRequest, NextApiResponse } from 'next';
-import puppeteer from 'puppeteer-core'; // Используем puppeteer-core, так как Chromium предоставляется отдельно
+import * as puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import archiver from 'archiver';
 import { supabase } from '../../utils/supabase';
