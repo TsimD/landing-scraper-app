@@ -1,11 +1,12 @@
 // src/pages/api/scrape.ts
 
 import { NextApiRequest, NextApiResponse } from 'next';
-// ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ: Используем import * as puppeteer, чтобы получить все типы (Browser, Page и т.д.)
 import * as puppeteer from 'puppeteer-core'; 
 import chromium from '@sparticuz/chromium';
 import archiver from 'archiver';
 import { supabase } from '../../utils/supabase';
+// Node.js Buffer нужен для совместимости с archiver в TypeScript
+import { Buffer } from 'buffer';
 
 // Указываем, что это Serverless Function, работающая на Node.js
 export const config = {
@@ -32,7 +33,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
-  // ТИПЫ: Теперь puppeteer.Browser разрешен
   let browser: puppeteer.Browser | null = null; 
   let taskId: number | null = null; 
 
@@ -66,7 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const page = await browser.newPage();
 
-    // 3. Блокировка ненужных ресурсов
+    // 3. Блокировка ненужных ресурсов (оптимизация)
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       if (
@@ -94,7 +94,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       throw new Error(`Element with selector "${elementSelector}" not found.`);
     }
 
-    const screenshotBuffer = await element.screenshot({ type: 'png' });
+    // ИСПРАВЛЕНИЕ: Используем as Buffer для устранения ошибки типов в сборке
+    const screenshotBuffer = await element.screenshot({ type: 'png' }) as Buffer;
     const htmlContent = await element.evaluate(el => el.outerHTML);
 
     // 7. Создаем ZIP-архив
@@ -130,6 +131,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .eq('id', taskId);
     }
 
+    // Важно: проверяем, не отправлены ли заголовки, прежде чем отправить 500
     if (!res.headersSent) {
       return res.status(500).json({ error: 'Failed to complete scraping process.', details: String(error) });
     }
