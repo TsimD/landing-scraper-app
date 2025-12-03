@@ -1,11 +1,11 @@
 // src/pages/api/scrape.ts
 
 import { NextApiRequest, NextApiResponse } from 'next';
-// ИСПРАВЛЕНИЕ: Используем стандартный импорт, так как типы теперь встроены в puppeteer-core
-import puppeteer from 'puppeteer-core'; 
+// ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ: Используем import * as puppeteer, чтобы получить все типы (Browser, Page и т.д.)
+import * as puppeteer from 'puppeteer-core'; 
 import chromium from '@sparticuz/chromium';
 import archiver from 'archiver';
-import { supabase } from '../../utils/supabase'; // Правильный относительный путь
+import { supabase } from '../../utils/supabase';
 
 // Указываем, что это Serverless Function, работающая на Node.js
 export const config = {
@@ -32,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
-  // ТИПЫ: Используем импортированный объект puppeteer
+  // ТИПЫ: Теперь puppeteer.Browser разрешен
   let browser: puppeteer.Browser | null = null; 
   let taskId: number | null = null; 
 
@@ -61,7 +61,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         '--disable-dev-shm-usage'
       ],
       executablePath: await chromium.executablePath(),
-      // 'new' теперь должен работать, так как нет конфликтующих старых типов
       headless: 'new', 
     });
 
