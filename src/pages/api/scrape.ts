@@ -61,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         '--disable-dev-shm-usage'
       ],
       executablePath: await chromium.executablePath(),
-      headless: 'new', 
+      headless: true, 
     });
 
     const page = await browser.newPage();
